@@ -19,9 +19,13 @@ Const TrainerStrikeCountInc = 10
 
 Const BeepTimeTimer = 300
 Const BeepTimeStop = 500
-Const BeepTimeStrike = 100
+Const BeepTimeStrike = 50
 Const BeepTimeBtn = 50
 Const BeepTimeBatteryLow = 1000
+Const BeepTimeDefaultOff = 100
+
+Const BeepOn = 1
+Const BeepOff = 0
 
 Const DebounceLimit = 10
 Const TimerPeriodInMs = 1
@@ -114,7 +118,11 @@ Dim TrainerStrikeCount As Integer           ' Stores the strike count set by the
 Dim TrainerCountSetup As Byte               ' Helper variable which shows if we are in count setup mode
 
 Dim CounterTimer As Word                    ' Helper variable for the software timer
-Dim CounterBeep As Byte                     ' Shows how many timer cycles the beep sound should last
+Dim CounterBeep As Byte                     ' Helper variable for the beep sound
+Dim BeepIntervalOn As Byte                  ' Shows how many timer cycles the beep sound should last
+Dim BeepIntervalOff As Byte                 ' Shows how many timer cycles should be between two beep sounds
+Dim BeepCount As Byte                    	' Shows how many beep sounds sould be
+Dim BeepState As Byte                    	' Helper variable for the beep sound
 
 Dim CurrentTime As Dword                    ' Shows the time elapsed since startup in ms
 
@@ -149,7 +157,9 @@ Declare Sub ActionBeforeTrainer()
 Declare Sub EnableStriking()
 Declare Sub DisableStriking()
 
-Declare Sub BeepMs(ByVal timeMs As Word)
+Declare Sub BeepMs(ByVal intervalOn As Word)
+
+Declare Sub BeepMsExtended(ByVal intervalOn As Word, ByVal intervalOff As Word, ByVal count As Word)
 
 Declare Sub TimerMs(ByVal timeMs As Word)
 
@@ -250,6 +260,11 @@ TrainerCountSetup = 0
 
 CounterTimer = 0
 CounterBeep = 0
+BeepCount = 0
+BeepIntervalOff = 0
+BeepIntervalOn = 0
+BeepState = 0
+
 CurrentTime = 0
 
 ActionResult  = 0
@@ -523,6 +538,7 @@ Sub ActionInStrikeForce()
         If ActualSubState = SubStateStrikeForceRunSingle Then
             ActionResult = MaxAcc
             Call DisableStriking()
+			Call BeepMsExtended(BeepTimeStop, BeepTimeDefaultOff, 2)
             ActualSubState = SubStateDisplayResult
 
         Elseif ActualSubState = SubStateStrikeForceRunTen Then
@@ -532,6 +548,7 @@ Sub ActionInStrikeForce()
 
             If MeasurementId > 10 Then
                 Call DisableStriking()
+				Call BeepMsExtended(BeepTimeStop, BeepTimeDefaultOff, 2)
 
                 ActionResult = 0
                 For Index = 1 to 10
@@ -564,14 +581,10 @@ Sub ActionInStrikeSpeed()
                 ActualSubState = SubStateBackToMenu
 
             Case SubStateStrikeSpeedRunShort
-                Call TimerMs(0)
-                FlagTimer = 0
                 Call DisableStriking()
                 ActualSubState = SubStateStrikeSpeedConfigShort
 
             Case SubStateStrikeSpeedRunLong
-                Call TimerMs(0)
-                FlagTimer = 0
                 Call DisableStriking()
                 ActualSubState = SubStateStrikeSpeedConfigLong
 
@@ -590,14 +603,16 @@ Sub ActionInStrikeSpeed()
         Select Case ActualSubState
             Case SubStateStrikeSpeedConfigShort
                 StrikeCount = 0
+                Call TimerMs(0)
+                FlagTimer = 0
                 Call EnableStriking()
-                Call TimerMs(StrikeSpeedTimeShort)
                 ActualSubState = SubStateStrikeSpeedRunShort
 
             Case SubStateStrikeSpeedConfigLong
                 StrikeCount = 0
+                Call TimerMs(0)
+                FlagTimer = 0
                 Call EnableStriking()
-                Call TimerMs(StrikeSpeedTimeLong)
                 ActualSubState = SubStateStrikeSpeedRunLong
 
             Case SubStateBackToMenu
@@ -614,15 +629,23 @@ Sub ActionInStrikeSpeed()
 
     ' Check if there is an unprocessed strike
     If GetFlagStrike() = 1 Then
+		' Start the timer after the first strike
+		If StrikeCount = 0 Then
+			If ActualSubState = SubStateStrikeSpeedRunShort Then
+                Call TimerMs(StrikeSpeedTimeShort)
+			Elseif ActualSubState = SubStateStrikeSpeedRunLong Then
+                Call TimerMs(StrikeSpeedTimeLong)
+			Endif
+		Endif
+		
         Incr StrikeCount
-        Call BeepMs(BeepTimeStop)
         Call LcdUpdate()
     Endif
 
     ' Check if the timer has ended
     If GetFlagTimer() = 1 Then
         Call DisableStriking()
-        Call BeepMs(BeepTimeStop)
+        Call BeepMsExtended(BeepTimeStop, BeepTimeDefaultOff, 2)
         ActionResult = StrikeCount
         ActualSubState = SubStateDisplayResult
         Call LcdUpdate()
@@ -643,8 +666,6 @@ Sub ActionInReflex()
                 ActualSubState = SubStateBackToMenu
 
             Case SubStateReflexRun
-                Call TimerMs(0)
-                FlagTimer = 0
                 ActualSubState = SubStateReflexConfig
 
             Case SubStateBackToMenu
@@ -706,6 +727,7 @@ Sub ActionInReflex()
             ActionResult = ActionResult / 10
 
             ActualSubState = SubStateDisplayResult
+			Call BeepMsExtended(BeepTimeStop, BeepTimeDefaultOff, 2)
         Endif
 
 
@@ -790,6 +812,7 @@ Sub ActionInTrainer()
 
         If StrikeCount = TrainerStrikeCount Then
             Call DisableStriking()
+			Call BeepMsExtended(BeepTimeStop, BeepTimeDefaultOff, 2)
             ActionResult = TrainerStrikeCount
             ActualSubState = SubStateDisplayResult
         Endif
@@ -839,8 +862,18 @@ Sub DisableStriking()
 End Sub
 
 
-Sub BeepMs(ByVal timeMs As Word)
-    CounterBeep = timeMs / TimerPeriodInMs
+Sub BeepMs(ByVal intervalOn As Word)
+	BeepIntervalOn = intervalOn
+	BeepIntervalOff = 0
+	BeepCount = 1
+	BeepState = BeepOff
+End Sub
+
+Sub BeepMsExtended(ByVal intervalOn As Word, ByVal intervalOff As Word, ByVal count As Word)
+	BeepIntervalOn = intervalOn
+	BeepIntervalOff = intervalOff
+	BeepCount = count
+	BeepState = BeepOff
 End Sub
 
 
@@ -1007,10 +1040,25 @@ TimerISR:
 
 
     ' Beep sound
+	If BeepCount > 0 And CounterBeep = 0 Then
+		If BeepState = BeepOff Then
+			CounterBeep = BeepIntervalOn
+			BeepState = BeepOn
+			Decr BeepCount
+		Else
+			If BeepIntervalOff > 0 Then
+				CounterBeep = BeepIntervalOff
+			Endif
+			BeepState = BeepOff
+		Endif
+	Endif
+	
     If CounterBeep > 0 Then
         Decr CounterBeep
-        Reset PinBeep
-
+		If BeepState = BeepOn Then
+			Reset PinBeep
+		Endif
+		
         If CounterBeep = 0 Then
             Set PinBeep
         Endif
