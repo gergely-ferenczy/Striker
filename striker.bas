@@ -23,6 +23,8 @@ Const BeepTimeStrike = 50
 Const BeepTimeBtn = 50
 Const BeepTimeBatteryLow = 1000
 Const BeepTimeDefaultOff = 100
+Const BeepTimeTimeoutOn = 50
+Const BeepTimeTimeoutOff = 50
 
 Const BeepOn = 1
 Const BeepOff = 0
@@ -78,7 +80,10 @@ Const BatteryCheckInterval = 60000
 Const BatteryLevelLow = 720
 
 ' Texts
-Const ForceUnitText = " [?]"
+Const ForceUnitText = "N"
+Const TimeUnitText = "ms"
+
+Const ForceConstantDivider = 200
 
 
 '___________ Global variables _____________________________________________________________________
@@ -101,13 +106,13 @@ Dim BtnModeCntr As Byte                     ' Counter value for MODE button (nee
 Dim BtnSetState As Byte                     ' Stable state of the SET button (needed for debouncing)
 Dim BtnSetCntr As Byte                      ' Counter value for SET button (needed for debouncing)
 
-Dim AccX As Integer
-Dim AccY As Integer
-Dim AccZ As Integer
-Dim MaxAcc As Integer
-Dim CurrAcc As Integer
+Dim AccX As Long
+Dim AccY As Long
+Dim AccZ As Long
+Dim MaxAcc As Long
+Dim CurrAcc As Long
 Dim MeasurementCount As Integer
-Dim AccMeasurements(10) As Integer          ' Array for holding 10 measurements for average calculation
+Dim AccMeasurements(10) As Long             ' Array for holding 10 measurements for average calculation
 Dim MeasurementId As Byte                   ' Current array id
 Dim StrikeCount As Byte                     ' Number of strikes
 
@@ -133,10 +138,11 @@ Dim StrikeEnabled As Byte
 Dim BatteryTimer As Word
 Dim BatteryAdcValue As Word
 
-Dim BagWeight As Integer
-Dim BagWeightInv As Integer
-Dim EramBagWeight as ERAM Integer At &H0
-Dim EramBagWeightInv as ERAM Integer At &H0
+Dim BagWeight As Long
+Dim BagWeightTemp As Long
+Dim BagWeightInv As Long
+Dim EramBagWeight as ERAM Long At &H0
+Dim EramBagWeightInv as ERAM Long At &H4
 
 '___________ Subroutine and function declarations _________________________________________________
 Declare Sub ChangeState(ByVal newState as Integer)
@@ -294,22 +300,27 @@ Reset PinPunch
 ' Show LCD welcome screen
 Cls
 Home
-Lcd "Strike Trainer"
+Lcd "-Strike Trainer-"
 Waitms 2000
 
 ' Go to setup mode if both buttons are pressed or the stored bag weight is not valid
-If (GetFlagModeButton() == 1 And GetFlagSetButton() == 1) Or (BagWeight <> (Not BagWeightInv)) Then
-    BagWeight = 1
-    LcdSetupModeUpdate()
+
+BagWeightTemp = Not BagWeightInv
+If GetFlagModeButton() = 1 And GetFlagSetButton() = 1 Or BagWeight <> BagWeightTemp Then
+    If BagWeight <> BagWeightTemp Then
+        BagWeight = 5
+    Endif
+    
+    Call LcdSetupModeUpdate()
     
     Do
-        If GetFlagModeButton() == 1 Then
-            BagWeight = BagWeight + 10
-            BagWeight = BagWeight MOD 200
-            LcdSetupModeUpdate()
+        If GetFlagModeButton() = 1 Then
+            BagWeight = BagWeight MOD 250
+            BagWeight = BagWeight + 5
+            Call LcdSetupModeUpdate()
         Endif
         
-        If GetFlagSetButton() == 1 Then
+        If GetFlagSetButton() = 1 Then
             ' Store new bag weight variable into EEPROM
             BagWeightInv = Not BagWeight
             EramBagWeight = BagWeight
@@ -388,7 +399,7 @@ Sub LcdUpdate()
 
     Select Case ActualState
         Case StateMainMenu
-            Lcd "*Main Menu*"
+            Lcd "[Main Menu]"
             Lowerline
             
             Select Case SelectedState
@@ -406,7 +417,7 @@ Sub LcdUpdate()
             End Select
 
         Case StateStrikeForce
-            Lcd "*Strike Force*"
+            Lcd "[Strike Force]"
             Lowerline
             
             Select Case ActualSubState
@@ -420,21 +431,26 @@ Sub LcdUpdate()
                     Lcd "Strike!"
 
                 Case SubStateStrikeForceRunTen
-                    Lcd "Count: " ; StrikeCount ; "/10"
+                    Lcd "[" ; StrikeCount ; "/10] "
+                    If StrikeCount > 0 Then
+                        Lcd AccMeasurements(StrikeCount) ; ForceUnitText
+                    Endif
 
                 Case SubStateBackToMenu
                     Lcd "Back"
 
                 Case SubStateDisplayResult
-                    If MeasurementId > 10 Then
-                        Lcd "Average: " ; ActionResult ; ForceUnitText
+                    If StrikeCount = 1 Then
+                        Lcd "[1/1]: " ; ActionResult ; ForceUnitText                        
+                    Elseif MeasurementId > 10 Then
+                        Lcd "[Avg]: " ; ActionResult ; ForceUnitText
                     Else
-                        Lcd "Strike " ; MeasurementId ; ": " ; AccMeasurements(MeasurementId) ; ForceUnitText
+                        Lcd "[" ; MeasurementId ; "/10]: " ; AccMeasurements(MeasurementId) ; ForceUnitText
                     Endif
             End Select
 
         Case StateStrikeSpeed
-            Lcd "*Strike Speed*"
+            Lcd "[Strike Speed]"
             Lowerline
             
             Select Case ActualSubState
@@ -458,7 +474,7 @@ Sub LcdUpdate()
             End Select
 
         Case StateReflex
-            Lcd "*Reflex*"
+            Lcd "[Reflex]"
             Lowerline
             
             Select Case ActualSubState
@@ -466,17 +482,24 @@ Sub LcdUpdate()
                     Lcd "Start"
 
                 Case SubStateReflexRun
-                    Lcd "Count: " ; StrikeCount ; "/10"
+                    Lcd "[" ; StrikeCount ; "/10] "
+                    If StrikeCount > 0 Then
+                        Lcd AccMeasurements(StrikeCount) ; TimeUnitText
+                    Endif
 
                 Case SubStateBackToMenu
                     Lcd "Back"
 
                 Case SubStateDisplayResult
-                    Lcd "Result: " ; ActionResult ; " ms"
+                    If MeasurementId > 10 Then
+                        Lcd "[Avg]: " ; ActionResult ; TimeUnitText
+                    Else
+                        Lcd "[" ; MeasurementId ; "/10]: " ; AccMeasurements(MeasurementId) ; TimeUnitText
+                    Endif
             End Select
 
         Case StateTrainer
-            Lcd "*Trainer*"
+            Lcd "[Trainer]"
             Lowerline
             
             Select Case ActualSubState
@@ -503,7 +526,7 @@ End Sub
 Sub LcdSetupModeUpdate()
     Cls
     Upperline
-    Lcd "*Weight Setup*"
+    Lcd "--Weight Setup--"
     
     Lowerline
     Lcd BagWeight ; " kg"
@@ -577,9 +600,9 @@ Sub ActionInStrikeForce()
                 Return
 
             Case SubStateDisplayResult
-                If MeasurementId > 10 Then
+                If MeasurementId = 11 Then
                     MeasurementId = 1
-                Else
+                Elseif StrikeCount > 1 Then
                     Incr MeasurementId
                 Endif
         End Select
@@ -589,16 +612,19 @@ Sub ActionInStrikeForce()
 
     ' Check if there is an unprocessed strike
     If GetFlagStrike() = 1 Then
+        Incr StrikeCount
+        
         If ActualSubState = SubStateStrikeForceRunSingle Then
-            ActionResult = MaxAcc
+            ActionResult = MaxAcc * BagWeight
+            ActionResult = ActionResult / ForceConstantDivider
             Call DisableStriking()
             Call BeepMsExtended(BeepTimeStop, BeepTimeDefaultOff, 2)
             ActualSubState = SubStateDisplayResult
 
         Elseif ActualSubState = SubStateStrikeForceRunTen Then
-            AccMeasurements(MeasurementId) = MaxAcc
+            AccMeasurements(MeasurementId) = MaxAcc * BagWeight
+            AccMeasurements(MeasurementId) = AccMeasurements(MeasurementId) / ForceConstantDivider
             Incr MeasurementId
-            Incr StrikeCount
 
             If MeasurementId > 10 Then
                 Call DisableStriking()
@@ -751,9 +777,11 @@ Sub ActionInReflex()
                 Return
 
             Case SubStateDisplayResult
-                Call ChangeState(StateMainMenu)
-                Return
-
+                If MeasurementId = 11 Then
+                    MeasurementId = 1
+                Else
+                    Incr MeasurementId
+                Endif
         End Select
 
         Call LcdUpdate()
@@ -770,29 +798,53 @@ Sub ActionInReflex()
         Incr MeasurementId
         Incr StrikeCount
 
-        TempStr = Str(ReflexTime) + " ms"
-        Call LcdNotice(TempStr, LcdNoticeTimeDefault)
-
         If MeasurementId > 10 Then
             ActionResult = 0
             For Index = 1 to 10
                 ActionResult = ActionResult + AccMeasurements(Index)
             Next Index
             ActionResult = ActionResult / 10
+            MeasurementId = 1
 
             ActualSubState = SubStateDisplayResult
             Call BeepMsExtended(BeepTimeStop, BeepTimeDefaultOff, 2)
         Endif
-
 
         Call LcdUpdate()
     Endif
 
     ' Check if the timer has ended
     If GetFlagTimer() = 1 Then
-        Call BeepMs(BeepTimeTimer)
-        ReflexTime = CurrentTime
-        Call EnableStriking()
+        If FlagReflexTimerStarted = 1 Then
+            FlagReflexTimerStarted = 2
+            Call TimerMs(999)
+            Call BeepMs(BeepTimeTimer)
+            ReflexTime = CurrentTime
+            Call EnableStriking()
+        Else
+            Call DisableStriking()
+            FlagReflexTimerStarted = 0
+            
+            AccMeasurements(MeasurementId) = 999
+            Incr MeasurementId
+            Incr StrikeCount
+
+            If MeasurementId > 10 Then
+                ActionResult = 0
+                For Index = 1 to 10
+                    ActionResult = ActionResult + AccMeasurements(Index)
+                Next Index
+                ActionResult = ActionResult / 10
+                MeasurementId = 1
+
+                ActualSubState = SubStateDisplayResult
+                Call BeepMsExtended(BeepTimeStop, BeepTimeDefaultOff, 2)
+            Else
+                Call BeepMsExtended(BeepTimeTimeoutOn, BeepTimeTimeoutOff, 2)
+            Endif
+            
+            Call LcdUpdate()
+        Endif
     Endif
 
     ' If we are in run mode and the timer has not been set, set it to a random time
@@ -948,7 +1000,7 @@ End Sub
 
 
 ' Returns the resultant force from the 3 force axis components
-Function GetResultantForce(ByVal x As Integer, ByVal y As Integer, ByVal z As Integer) As Integer
+Function GetResultantForce(ByVal x As Long, ByVal y As Long, ByVal z As Long) As Long
     Local sx As Single
     Local sy As Single
     Local sz As Single
