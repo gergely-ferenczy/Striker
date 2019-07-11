@@ -133,11 +133,17 @@ Dim StrikeEnabled As Byte
 Dim BatteryTimer As Word
 Dim BatteryAdcValue As Word
 
+Dim BagWeight As Integer
+Dim BagWeightInv As Integer
+Dim EramBagWeight as ERAM Integer At &H0
+Dim EramBagWeightInv as ERAM Integer At &H0
 
 '___________ Subroutine and function declarations _________________________________________________
 Declare Sub ChangeState(ByVal newState as Integer)
 
 Declare Sub LcdUpdate()
+
+Declare Sub LcdSetupModeUpdate()
 
 Declare Sub ActionInMainMenu()
 Declare Sub ActionBeforeMainMenu()
@@ -193,7 +199,7 @@ Enable Timer1
 
 '___________ Lcd config ___________________________________________________________________________
 Config Lcdpin = Pin , Db4 = Portb.0 , Db5 = Portb.1 , Db6 = Portd.6 , Db7 = Portd.7 , E = Portc.1 , Rs = Portc.0
-Config Lcd = 16 * 1a
+Config Lcd = 16 * 2
 Cursor Off Noblink
 Cls
 
@@ -271,6 +277,9 @@ ActionResult  = 0
 
 StrikeEnabled = 0
 
+' Read bag weight from EEPROM
+BagWeight = EramBagWeight
+BagWeightInv = EramBagWeightInv
 
 '___________ Startup ______________________________________________________________________________
 
@@ -287,6 +296,28 @@ Cls
 Home
 Lcd "Strike Trainer"
 Waitms 2000
+
+' Go to setup mode if both buttons are pressed or the stored bag weight is not valid
+If (GetFlagModeButton() == 1 And GetFlagSetButton() == 1) Or (BagWeight <> (Not BagWeightInv)) Then
+    BagWeight = 1
+    LcdSetupModeUpdate()
+    
+    Do
+        If GetFlagModeButton() == 1 Then
+            BagWeight = BagWeight + 10
+            BagWeight = BagWeight MOD 200
+            LcdSetupModeUpdate()
+        Endif
+        
+        If GetFlagSetButton() == 1 Then
+            ' Store new bag weight variable into EEPROM
+            BagWeightInv = Not BagWeight
+            EramBagWeight = BagWeight
+            EramBagWeightInv = BagWeightInv
+            Exit Do
+        Endif
+    Loop
+Endif
 
 Call LcdUpdate()        ' Show the initial display
 
@@ -353,16 +384,19 @@ End Sub
 
 Sub LcdUpdate()
     Cls
-    Home
+    Upperline
 
     Select Case ActualState
         Case StateMainMenu
+            Lcd "*Main Menu*"
+            Lowerline
+            
             Select Case SelectedState
                 Case StateStrikeForce
                     Lcd "Strike Force"
 
                 Case StateStrikeSpeed
-                    Lcd "Strike Frq"
+                    Lcd "Strike Speed"
 
                 Case StateReflex
                     Lcd "Reflex"
@@ -372,6 +406,9 @@ Sub LcdUpdate()
             End Select
 
         Case StateStrikeForce
+            Lcd "*Strike Force*"
+            Lowerline
+            
             Select Case ActualSubState
                 Case SubStateStrikeForceConfigSingle
                     Lcd "Single Strike"
@@ -397,6 +434,9 @@ Sub LcdUpdate()
             End Select
 
         Case StateStrikeSpeed
+            Lcd "*Strike Speed*"
+            Lowerline
+            
             Select Case ActualSubState
                 Case SubStateStrikeSpeedConfigShort
                     Lcd "Half Minute"
@@ -418,6 +458,9 @@ Sub LcdUpdate()
             End Select
 
         Case StateReflex
+            Lcd "*Reflex*"
+            Lowerline
+            
             Select Case ActualSubState
                 Case SubStateReflexConfig
                     Lcd "Start"
@@ -433,6 +476,9 @@ Sub LcdUpdate()
             End Select
 
         Case StateTrainer
+            Lcd "*Trainer*"
+            Lowerline
+            
             Select Case ActualSubState
                 Case SubStateTrainerConfig
                     If TrainerCountSetup = 0 Then
@@ -454,6 +500,14 @@ Sub LcdUpdate()
     End Select
 End Sub
 
+Sub LcdSetupModeUpdate()
+    Cls
+    Upperline
+    Lcd "*Weight Setup*"
+    
+    Lowerline
+    Lcd BagWeight ; " kg"
+End Sub
 
 '___________ State action subroutines _____________________________________________________________
 Sub ActionInMainMenu()
