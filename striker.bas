@@ -235,6 +235,9 @@ PinBeep Alias Portc.2
 Config Pinb.3 = Output
 PinXyzReset Alias Portb.3
 
+Config Pinb.5 = Output
+PinLcdPower Alias Portb.5
+
 Config Pind.5 = Output
 PinPunch Alias Portd.5
 
@@ -297,6 +300,9 @@ BagWeightInv = EramBagWeightInv
 
 
 Set PinBeep
+Set PinLcdBackLight
+Reset PinLcdPower
+
 Set PinXyzReset
 Set PinPunch
 Waitms 1
@@ -975,7 +981,7 @@ End Sub
 
 Sub EnableLcdBackLight()
     LcdBackLightTimer = LcdBackLightTimerStartValue
-    Set PinLcdBackLight
+    Reset PinLcdBackLight
 End Sub
 
 Sub BeepMs(ByVal intervalOn As Word)
@@ -1205,7 +1211,7 @@ TimerISR:
     If LcdBackLightTimer > 0 Then
         Decr LcdBackLightTimer
         If LcdBackLightTimer = 0 Then
-            Reset PinLcdBackLight
+            Set PinLcdBackLight
         Endif
     Endif
 Return
