@@ -1,5 +1,5 @@
 $Regfile="m328def.dat"
-$Crystal=10000000
+$Crystal=20000000
 $hwstack=128
 $swstack=256
 $framesize=512
