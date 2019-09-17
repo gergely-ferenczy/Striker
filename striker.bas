@@ -171,6 +171,8 @@ Declare Sub ActionBeforeTrainer()
 Declare Sub EnableStriking()
 Declare Sub DisableStriking()
 
+Declare Sub EnableLcdBackLight()
+
 Declare Sub BeepMs(ByVal intervalOn As Word)
 
 Declare Sub BeepMsExtended(ByVal intervalOn As Word, ByVal intervalOff As Word, ByVal count As Word)
