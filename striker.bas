@@ -1,4 +1,4 @@
-$Regfile="m168def.dat"
+$Regfile="m328def.dat"
 $Crystal=10000000
 $hwstack=128
 $swstack=256
