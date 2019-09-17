@@ -34,7 +34,7 @@ Const TimerPeriodInMs = 1
 Const TimerReloadValue = 65526
 
 Const LcdNoticeTimeDefault = 1500
-
+Const LcdBackLightTimerStartValue = 3000
 
 ' Standard values for I/O handling
 Const PinHigh = 1
@@ -138,6 +138,8 @@ Dim StrikeEnabled As Byte
 Dim BatteryTimer As Word
 Dim BatteryAdcValue As Word
 
+Dim LcdBackLightTimer as Word
+
 Dim BagWeight As Long
 Dim BagWeightTemp As Long
 Dim BagWeightInv As Long
@@ -235,7 +237,7 @@ Config Pind.5 = Output
 PinPunch Alias Portd.5
 
 Config Pind.4 = Output
-PinLed Alias Portd.4
+PinLcdBackLight Alias Portd.4
 
 
 '___________ Initial values _______________________________________________________________________
@@ -282,6 +284,8 @@ CurrentTime = 0
 ActionResult  = 0
 
 StrikeEnabled = 0
+
+LcdBackLightTimer = 0
 
 ' Read bag weight from EEPROM
 BagWeight = EramBagWeight
@@ -967,6 +971,10 @@ Sub DisableStriking()
     StrikeEnabled = 0
 End Sub
 
+Sub EnableLcdBackLight()
+    LcdBackLightTimer = LcdBackLightTimerStartValue
+    Set PinLcdBackLight
+End Sub
 
 Sub BeepMs(ByVal intervalOn As Word)
     BeepIntervalOn = intervalOn
@@ -1090,7 +1098,7 @@ TimerISR:
 
 
     ' Debouncing the MODE btn
-    If BtnModeState = BtnUp Then                ' Mode button stale state is up
+    If BtnModeState = BtnUp Then                ' Mode button state is up
         If PinModeBtn = PinLow Then             ' If the mode button is pressed, increase the debounce cntr
             Incr BtnModeCntr
         Else                                    ' Else reset the counter to zero
@@ -1100,10 +1108,11 @@ TimerISR:
         If BtnModeCntr >= DebounceLimit Then    ' Debounce complete, btn is pressed down so set the stable state to up and set btn flag
             BtnModeCntr = 0
             BtnModeState = BtnDown
-            FlagModeButton = 1
+            FlagModeButton = 1            
+            Call EnableLcdBackLight()
             Call BeepMs(BeepTimeBtn)
         Endif
-    Else                                        ' Mode button stale state is down
+    Else                                        ' Mode button state is down
         If PinModeBtn = PinHigh Then            ' If the mode button is released, increase the debounce cntr
             Incr BtnModeCntr
         Else                                    ' Else reset the counter to zero
@@ -1118,7 +1127,7 @@ TimerISR:
 
 
     ' Debouncing the SET btn
-    If BtnSetState = BtnUp Then                 ' Set button stale state is up
+    If BtnSetState = BtnUp Then                 ' Set button state is up
         If PinSetBtn = PinLow Then              ' If the set button is pressed, increase the debounce cntr
             Incr BtnSetCntr
         Else                                    ' Else reset the counter to zero
@@ -1129,10 +1138,11 @@ TimerISR:
             BtnSetCntr = 0
             BtnSetState = BtnDown
             FlagSetButton = 1
+            Call EnableLcdBackLight()
             Call BeepMs(BeepTimeBtn)
         Endif
-    Else                                        ' Set button stale state is down
-        If PinSetBtn = PinHigh Then                     ' If the set button is released, increase the debounce cntr
+    Else                                        ' Set button state is down
+        If PinSetBtn = PinHigh Then             ' If the set button is released, increase the debounce cntr
             Incr BtnSetCntr
         Else                                    ' Else reset the counter to zero
             BtnSetCntr = 0
@@ -1188,6 +1198,14 @@ TimerISR:
         BatteryTimer = BatteryCheckInterval
         FlagBattery = 1
     Endif
+    
+    ' Lcd Backlight Timer
+    If LcdBackLightTimer > 0 Then
+        Decr LcdBackLightTimer
+        If LcdBackLightTimer = 0 Then
+            Reset PinLcdBackLight
+        Endif
+    Endif
 Return
 
 AccelerometerISR:
@@ -1216,7 +1234,8 @@ AccelerometerISR:
             Reset PinXyzReset
             Reset PinPunch
 
-            FlagStrike = 1
+            FlagStrike = 1            
+            Call EnableLcdBackLight()
             BeepMs(BeepTimeStrike)
         Else
             Set PinXyzReset
