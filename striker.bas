@@ -230,7 +230,10 @@ PinSetBtn Alias Pind.3
 
 
 Config Pinc.2 = Output
-PinBeep Alias Portc.2
+PinLed Alias Portc.2
+
+Config Pinc.3 = Output
+PinBeep Alias Portc.3
 
 Config Pinb.3 = Output
 PinXyzReset Alias Portb.3
@@ -299,6 +302,7 @@ BagWeightInv = EramBagWeightInv
 '___________ Startup ______________________________________________________________________________
 
 
+Set PinLed
 Set PinBeep
 Set PinLcdBackLight
 Reset PinLcdPower
@@ -1180,10 +1184,12 @@ TimerISR:
     If CounterBeep > 0 Then
         Decr CounterBeep
         If BeepState = BeepOn Then
+            Reset PinLed
             Reset PinBeep
         Endif
         
         If CounterBeep = 0 Then
+            Set PinLed
             Set PinBeep
         Endif
     Endif
