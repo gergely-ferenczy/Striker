@@ -31,7 +31,7 @@ Const BeepOff = 0
 
 Const DebounceLimit = 10
 Const TimerPeriodInMs = 1
-Const TimerReloadValue = 65526
+Const TimerReloadValue = 45535
 
 Const LcdNoticeTimeDefault = 1500
 Const LcdBackLightTimerStartValue = 3000
@@ -201,7 +201,7 @@ Config Int0 = Rising
 On Int0 AccelerometerISR
 Enable Int0
 
-Config Timer1 = Timer, Prescale = 1024,
+Config Timer1 = Timer, Prescale = 1,
 On Timer1 TimerISR
 TIMER1 = TimerReloadValue
 Enable Timer1
