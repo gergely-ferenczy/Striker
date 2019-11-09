@@ -34,7 +34,7 @@ Const TimerPeriodInMs = 1
 Const TimerReloadValue = 45535
 
 Const LcdNoticeTimeDefault = 1500
-Const LcdBackLightTimerStartValue = 3000
+Const LcdBackLightTimerStartValue = 30000
 
 ' Standard values for I/O handling
 Const PinHigh = 1
@@ -72,8 +72,8 @@ Const SubStateTrainerConfig = 2
 Const SubStateTrainerRun = 3
 
 ' Strike speed time constants
-Const StrikeSpeedTimeShort = 10000
-Const StrikeSpeedTimeLong = 30000
+Const StrikeSpeedTimeShort = 30000
+Const StrikeSpeedTimeLong = 60000
 
 ' Battery parameters
 Const BatteryCheckInterval = 60000
