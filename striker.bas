@@ -809,6 +809,7 @@ Sub ActionInReflex()
 
         ReflexTime = CurrentTime - ReflexTime
         FlagReflexTimerStarted = 0
+        Call TimerMs(0)
 
         AccMeasurements(MeasurementId) = ReflexTime
         Incr MeasurementId
@@ -837,7 +838,7 @@ Sub ActionInReflex()
             Call BeepMs(BeepTimeTimer)
             ReflexTime = CurrentTime
             Call EnableStriking()
-        Else
+        Elseif FlagReflexTimerStarted = 2 Then
             Call DisableStriking()
             FlagReflexTimerStarted = 0
             
@@ -952,7 +953,7 @@ End Sub
 
 Sub ActionBeforeStrikeForce()
     ' Set selected substate to default
-    ActualSubState = SubStateStrikeForceConfigSingle
+    ActualSubState = SubStateStrikeForceConfigTen
 End Sub
 
 Sub ActionBeforeStrikeSpeed()
