@@ -19,9 +19,6 @@ Const FeedbackModeBoth = 3
 Const FeedbackModeStart = FeedbackModeSound
 Const FeedbackModeCount = 3
 
-Const BtnLeft = 1
-Const BtnRight = 2
-
 Const BeepTimeTimer = 300
 Const BeepTimeStop = 500
 Const BeepTimeStrike = 50
@@ -49,10 +46,11 @@ Const BtnUp = 0
 
 
 ' State machine constants
-Const StateReflexInitConfig = 0
-Const StateReflexStart = 1
-Const StateReflexRun = 2
-Const StateDisplayResult = 3
+Const StateReflexFeedbackConfig = 0
+Const StateReflexHandSideConfig = 1
+Const StateReflexStart = 2
+Const StateReflexRun = 3
+Const StateDisplayResult = 4
 
 ' Battery parameters
 Const BatteryCheckInterval = 60000
@@ -81,7 +79,6 @@ Dim BtnRightCntr As Byte                    ' Counter value for SET button (need
 Dim RefMeasurements(10) As Long             ' Array for holding 10 measurements for average calculation
 Dim MeasurementId As Byte                   ' Current array id
 Dim PushCount As Byte                       ' Number of strikes
-Dim LastPushedButton As Byte
 
 Dim ReflexTime As Dword                     ' Helper variable for storing the current time in reflex mode
 
@@ -104,9 +101,9 @@ Dim BatteryAdcValue As Word
 Dim LcdBackLightTimer as Word
 
 Dim Index As Integer
-Dim TempCond1 As Integer
+Dim TempCond As Integer
 Dim TempCond2 As Integer
-
+Dim LeftHandedMode as Byte
 
 '___________ Subroutine and function declarations _________________________________________________
 
@@ -121,10 +118,6 @@ Declare Sub BeepMsExtended(ByVal intervalOn As Word, ByVal intervalOff As Word, 
 Declare Sub TimerMs(ByVal timeMs As Word)
 
 Declare Sub LcdNotice(ByVal msg As String, ByVal timeMs As Word)
-
-Declare Sub EnablePushing()
-
-Declare Sub DisablePushing()
 
 Declare Function GetFlagLeftButton() As Byte
 
@@ -179,7 +172,7 @@ PinLcdBackLight Alias Portd.4
 
 
 '___________ Initial values _______________________________________________________________________
-ActualState = StateReflexInitConfig
+ActualState = StateReflexFeedbackConfig
 SelectedFeedbackMode = FeedbackModeSound
 
 FlagLeftButton = 0
@@ -210,14 +203,14 @@ ActionResult  = 0
 
 PushEnabled = 0
 
-LcdBackLightTimer = 0
+LcdBackLightTimer = LcdBackLightTimerStartValue
 
 
 '___________ Startup ______________________________________________________________________________
 
 Set PinLed
 Set PinBeep
-Set PinLcdBackLight
+Reset PinLcdBackLight
 Reset PinLcdPower
 
 ' Show LCD welcome screen
@@ -226,6 +219,8 @@ Home
 Lcd " Reflex Trainer "
 Waitms 2000
 
+FlagLeftButton = 0
+FlagRightButton = 0
 
 Call LcdUpdate()        ' Show the initial display
 
@@ -234,46 +229,75 @@ Call LcdUpdate()        ' Show the initial display
 Do
     ' Call the action handler of the actual state
     Select Case ActualState
-        Case StateReflexInitConfig                                  ' If we are in InitConfig state
+        Case StateReflexFeedbackConfig                                  ' If we are in InitConfig state
             If GetFlagLeftButton() = 1 Then
                 If SelectedFeedbackMode = FeedbackModeCount Then    ' Reached the end of the feedback mode list, go back to first mode
                     SelectedFeedbackMode = FeedbackModeStart
                 Else
                     Incr SelectedFeedbackMode                       ' Select next feedback mode
                 Endif
+
+                Call LcdUpdate()
+            Endif
+
+            If GetFlagRightButton() = 1 Then
+                ActualState = StateReflexHandSideConfig             ' Go to hand side config state
+
+                Call LcdUpdate()
+            Endif
+
+        Case StateReflexHandSideConfig
+            If GetFlagLeftButton() = 1 Then
+                If LeftHandedMode = 0 Then
+                    LeftHandedMode = 1
+                Else
+                    LeftHandedMode = 0
+                Endif
+
+                Call LcdUpdate()
             Endif
 
             If GetFlagRightButton() = 1 Then
                 ActualState = StateReflexStart                      ' Go to reflex start state
+
+                Call LcdUpdate()
             Endif
 
         Case StateReflexStart                                       ' If we are in Start state
-            If GetFlagRightButton() = 1 Then
+            TempCond = 0
+            If GetFlagRightButton() = 1 And LeftHandedMode = 0 Then
+                TempCond = 1
+            Endif
+
+            If GetFlagLeftButton() = 1 And LeftHandedMode = 1 Then
+                TempCond = 1
+            Endif
+
+            If TempCond = 1 Then
                 MeasurementId = 1
                 PushCount = 0
                 Call TimerMs(0)
                 FlagTimer = 0
                 ReflexTime = 0
                 FlagReflexTimerStarted = 0
-                Call DisablePushing()
+                PushEnabled = 0
                 ActualState = StateReflexRun
+                Call LcdUpdate()
             Endif
 
         Case StateReflexRun                                         ' If we are in Run state
-            If GetFlagLeftButton() = 1 And LastPushedButton = BtnRight Then
-                TempCond1 = 1
-            Else
-                TempCond1 = 0
+
+            TempCond = 0
+            If BtnLeftState = BtnDown And LeftHandedMode = 0 Then
+                TempCond = 1
             Endif
 
-            If GetFlagRightButton() = 1 And LastPushedButton = BtnLeft Then
-                TempCond2 = 1
-            Else
-                TempCond2 = 0
+            If BtnRightState = BtnDown And LeftHandedMode = 1 Then
+                TempCond = 1
             Endif
 
-            If TempCond1 = 1 Or TempCond2 = 1 Then
-                Call DisablePushing()
+            If TempCond = 1 And PushEnabled = 1 Then
+                PushEnabled = 0
 
                 ReflexTime = CurrentTime - ReflexTime
                 FlagReflexTimerStarted = 0
@@ -305,10 +329,10 @@ Do
                     Call TimerMs(999)
                     Call BeepMs(BeepTimeTimer)
                     ReflexTime = CurrentTime
-                    Call EnablePushing()
+                    PushEnabled = 1
 
                 Elseif FlagReflexTimerStarted = 2 Then
-                    Call DisablePushing()
+                    PushEnabled = 0
                     FlagReflexTimerStarted = 0
 
                     RefMeasurements(MeasurementId) = 999
@@ -333,23 +357,44 @@ Do
                 Endif
             Endif
 
-            ' If we are in run mode and the timer has not been set, set it to a random time
-            If FlagReflexTimerStarted = 0 Then
+            TempCond = 0
+            If BtnRightState = BtnDown And LeftHandedMode = 0 Then
+                TempCond = 1
+            Endif
+
+            If BtnLeftState = BtnDown And LeftHandedMode = 1 Then
+                TempCond = 1
+            Endif
+
+            If FlagReflexTimerStarted = 0 And TempCond = 1 Then
                 Call TimerMs(Rnd(ReflexStrikeRndTime) + ReflexStrikeMinTime)
                 FlagReflexTimerStarted = 1
+            Elseif FlagReflexTimerStarted = 1 And TempCond = 0 Then                
+                Call TimerMs(Rnd(ReflexStrikeRndTime) + ReflexStrikeMinTime)
             Endif
 
         Case StateDisplayResult                                     ' If we are in DisplayResult state
-            If GetFlagLeftButton() = 1 Then
+            If CounterTimer = 0 Then
+                PushEnabled = 0
+                Call TimerMs(500)
+            Endif
+        
+            If GetFlagTimer() = 1 Then
+                PushEnabled = 1
+            Endif
+        
+            If GetFlagLeftButton() = 1 And PushEnabled = 1 Then
                 ActualState = StateReflexStart
+                Call LcdUpdate()
             Endif
 
-            If GetFlagRightButton() = 1 Then
+            If GetFlagRightButton() = 1 And PushEnabled = 1 Then
                 If MeasurementId = 11 Then
                     MeasurementId = 1
                 Else
                     Incr MeasurementId
                 Endif
+                Call LcdUpdate()
             Endif
     End Select
 
@@ -370,7 +415,7 @@ Sub LcdUpdate()
     Cls
 
     Select Case ActualState
-        Case StateReflexInitConfig
+        Case StateReflexFeedbackConfig
             Upperline
             Lcd "Feedback setup:"
             Lowerline
@@ -383,19 +428,33 @@ Sub LcdUpdate()
                     Lcd "Sound & Blinking"
             End Select
 
+        Case StateReflexHandSideConfig
+            Upperline
+            Lcd "Left hand mode:"
+            Lowerline
+            If LeftHandedMode = 1 Then
+                Lcd "ON"
+            Else
+                Lcd "OFF"
+            Endif
+
         Case StateReflexStart
             Upperline
-            Lcd "Press RIGHT btn"
+            If LeftHandedMode = 0 Then
+                Lcd "Hold RIGHT btn"
+            Else
+                Lcd "Hold LEFT btn"
+            Endif
+
             Lowerline
             Lcd "to start"
 
         Case StateReflexRun
             Upperline
             If PushCount = 0 Then
-                Lcd "Go!"
+                Lcd "[1/10]: "
             Else
-                Lcd "[" ; PushCount ; "/10] "
-                Lowerline
+                Lcd "[" ; PushCount ; "/10]: "
                 Lcd RefMeasurements(PushCount) ; TimeUnitText
             Endif
 
@@ -413,14 +472,6 @@ Sub LcdUpdate()
 End Sub
 
 '___________ Helper functions and subroutines _____________________________________________________
-
-Sub EnablePushing()
-    PushEnabled = 1
-End Sub
-
-Sub DisablePushing()
-    PushEnabled = 0
-End Sub
 
 Sub EnableLcdBackLight()
     LcdBackLightTimer = LcdBackLightTimerStartValue
@@ -530,9 +581,7 @@ TimerISR:
             BtnLeftCntr = 0
             BtnLeftState = BtnDown
             FlagLeftButton = 1
-            LastPushedButton = BtnLeft
             Call EnableLcdBackLight()
-            Call BeepMs(BeepTimeBtn)
         Endif
     Else                                        ' Left button state is down
         If PinLeftBtn = PinHigh Then            ' If the left button is released, increase the debounce cntr
@@ -560,9 +609,7 @@ TimerISR:
             BtnRightCntr = 0
             BtnRightState = BtnDown
             FlagRightButton = 1
-            LastPushedButton = BtnRight
             Call EnableLcdBackLight()
-            Call BeepMs(BeepTimeBtn)
         Endif
     Else                                        ' Right button state is down
         If PinRightBtn = PinHigh Then           ' If the right button is released, increase the debounce cntr
@@ -595,8 +642,14 @@ TimerISR:
     If CounterBeep > 0 Then
         Decr CounterBeep
         If BeepState = BeepOn Then
-            Reset PinLed
-            Reset PinBeep
+            If SelectedFeedbackMode = FeedbackModeSound Then
+                Reset PinBeep
+            Elseif SelectedFeedbackMode = FeedbackModeLed Then
+                Reset PinLed
+            Elseif SelectedFeedbackMode = FeedbackModeBoth Then
+                Reset PinLed
+                Reset PinBeep
+            Endif
         Endif
 
         If CounterBeep = 0 Then
