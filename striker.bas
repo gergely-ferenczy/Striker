@@ -26,6 +26,8 @@ Const BeepTimeDefaultOff = 100
 Const BeepTimeTimeoutOn = 50
 Const BeepTimeTimeoutOff = 50
 
+Const PunchLedOnTime = 15
+
 Const BeepOn = 1
 Const BeepOff = 0
 
@@ -124,6 +126,7 @@ Dim TrainerCountSetup As Byte               ' Helper variable which shows if we 
 
 Dim CounterTimer As Word                    ' Helper variable for the software timer
 Dim CounterBeep As Byte                     ' Helper variable for the beep sound
+Dim CounterPunchLed As Byte
 Dim BeepIntervalOn As Byte                  ' Shows how many timer cycles the beep sound should last
 Dim BeepIntervalOff As Byte                 ' Shows how many timer cycles should be between two beep sounds
 Dim BeepCount As Byte                        ' Shows how many beep sounds sould be
@@ -170,6 +173,8 @@ Declare Sub ActionBeforeTrainer()
 
 Declare Sub EnableStriking()
 Declare Sub DisableStriking()
+
+Declare Sub EnablePunchLight()
 
 Declare Sub EnableLcdBackLight()
 
@@ -230,19 +235,16 @@ PinSetBtn Alias Pind.3
 
 
 Config Pinc.2 = Output
-PinLed Alias Portc.2
+PinScreenLed Alias Portc.2
 
 Config Pinc.3 = Output
 PinBeep Alias Portc.3
-
-Config Pinb.3 = Output
-PinXyzReset Alias Portb.3
 
 Config Pinb.5 = Output
 PinLcdPower Alias Portb.5
 
 Config Pind.5 = Output
-PinPunch Alias Portd.5
+PinPunchLed Alias Portd.5
 
 Config Pind.4 = Output
 PinLcdBackLight Alias Portd.4
@@ -302,18 +304,15 @@ BagWeightInv = EramBagWeightInv
 '___________ Startup ______________________________________________________________________________
 
 
-Set PinLed
+Set PinScreenLed
 Set PinBeep
 Set PinLcdBackLight
 Reset PinLcdPower
 
-Set PinXyzReset
-Set PinPunch
-Waitms 1
-Reset PinXyzReset
-Reset PinPunch
+Waitms 10
 
 ' Show LCD welcome screen
+Call EnableLcdBackLight()
 Cls
 Home
 Lcd "-Strike Trainer-"
@@ -838,6 +837,7 @@ Sub ActionInReflex()
             Call BeepMs(BeepTimeTimer)
             ReflexTime = CurrentTime
             Call EnableStriking()
+            Call EnablePunchLight()
         Elseif FlagReflexTimerStarted = 2 Then
             Call DisableStriking()
             FlagReflexTimerStarted = 0
@@ -987,6 +987,11 @@ End Sub
 Sub EnableLcdBackLight()
     LcdBackLightTimer = LcdBackLightTimerStartValue
     Reset PinLcdBackLight
+End Sub
+
+Sub EnablePunchLight()
+    CounterPunchLed = PunchLedOnTime
+    Set PinPunchLed
 End Sub
 
 Sub BeepMs(ByVal intervalOn As Word)
@@ -1185,16 +1190,23 @@ TimerISR:
     If CounterBeep > 0 Then
         Decr CounterBeep
         If BeepState = BeepOn Then
-            Reset PinLed
+            Reset PinScreenLed
             Reset PinBeep
         Endif
         
         If CounterBeep = 0 Then
-            Set PinLed
+            Set PinScreenLed
             Set PinBeep
         Endif
     Endif
 
+    If CounterPunchLed > 0 Then
+        Decr CounterPunchLed
+        
+        If CounterPunchLed = 0 Then
+            Reset PinPunchLed
+        Endif
+    Endif
 
     ' Software Timer
     If CounterTimer > 0 Then
@@ -1217,6 +1229,7 @@ TimerISR:
     ' Lcd Backlight Timer
     If LcdBackLightTimer > 0 Then
         Decr LcdBackLightTimer
+        
         If LcdBackLightTimer = 0 Then
             Set PinLcdBackLight
         Endif
@@ -1243,19 +1256,14 @@ AccelerometerISR:
                  Endif
             Wend
 
-            Set PinXyzReset
-            Set PinPunch
+            Set PinPunchLed
             Waitms 1
-            Reset PinXyzReset
-            Reset PinPunch
+            Reset PinPunchLed
 
-            FlagStrike = 1            
+            FlagStrike = 1       
+            Call EnablePunchLight()
             Call EnableLcdBackLight()
             BeepMs(BeepTimeStrike)
-        Else
-            Set PinXyzReset
-            Waitms 1
-            Reset PinXyzReset
         Endif
     Endif
 Return
